@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Min Copy & Print - POS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        :root { --primary: #FF7F00; --dark: #2d3436; --bg: #fdfaf5; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: sans-serif; }
+        body { background: var(--bg); padding-bottom: 50px; }
+        header { background: var(--primary); color: white; text-align: center; padding: 25px; }
+        .container { max-width: 450px; margin: auto; padding: 15px; }
+        section { background: white; padding: 20px; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.85rem; font-weight: bold; margin-bottom: 6px; }
+        input, select { width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; outline: none; }
+        .btn-add { background: var(--primary); color: white; border: none; padding: 16px; width: 100%; border-radius: 12px; font-weight: bold; cursor: pointer; }
+
+        /* Voucher Overlay */
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; }
+        .voucher-card { background: white; width: 350px; border-radius: 10px; padding: 20px; position: relative; }
+        .close-v { position: absolute; top: 10px; right: 15px; font-size: 24px; color: #888; cursor: pointer; }
+        #vCapture { font-family: 'Courier New', monospace; color: #000; background: white; padding: 10px; }
+        .v-header { text-align: center; border-bottom: 2px dashed #FF7F00; padding-bottom: 10px; }
+        .v-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 10px 0; }
+        .v-summary { border-top: 1px solid #000; padding-top: 8px; text-align: right; }
+
+        /* Share Modal */
+        .share-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; border-radius: 20px; z-index: 2000; width: 320px; text-align: center; box-shadow: 0 10px 50px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Min Copy & Print</h1>
+    <p>Professional Billing System</p>
+</header>
+
+<div class="container">
+    <section>
+        <div class="form-group">
+            <label>ပစ္စည်းအမျိုးအမည်</label>
+            <input type="text" id="itemName" list="items" placeholder="ရွေးပါ/ရိုက်ပါ">
+            <datalist id="items">
+                <option value="A4 တစ်ဖက်">
+                <option value="Passport ပုံ (၁၂ ပုံ)">
+                <option value="A4 ကျောကပ် (Color)">
+            </datalist>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:2"><label>စျေးနှုန်း</label><input type="number" id="itemPrice" placeholder="0"></div>
+            <div class="form-group" style="flex:1"><label>ခုရေ</label><input type="number" id="itemQty" value="1"></div>
+        </div>
+        <button class="btn-add" onclick="addToCart()">စာရင်းထဲထည့်မည်</button>
+    </section>
+
+    <section id="mainBill" style="display:none;">
+        <table style="width:100%; font-size: 0.9rem;" id="billTable"></table>
+        <div style="margin-top:15px; padding:15px; background:#fff9f2; border-radius:12px;">
+            <div class="form-group">
+                <label>ငွေပေးချေမှု</label>
+                <select id="pMethod">
+                    <option value="Cash">Cash</option>
+                    <option value="KPay">KPay</option>
+                    <option value="WavePay">WavePay</option>
+                </select>
+            </div>
+            <p style="text-align:center; font-size:1.4rem; font-weight:bold; color:#d35400;">Total: <span id="gTotal">0</span> KS</p>
+        </div>
+        <button onclick="generateAndAutoSave()" class="btn-add" style="background: var(--dark); margin-top: 15px;">စလစ်ထုတ်မည်</button>
+    </section>
+</div>
+
+<div id="vOverlay" class="overlay">
+    <div class="voucher-card">
+        <span class="close-v" onclick="showShareDialog()">&times;</span>
+        <div id="vCapture">
+            <div class="v-header">
+                <h2 style="color:#FF7F00; font-size: 18px;">MIN COPY & PRINT</h2>
+                <p style="font-size:10px;">မေခဆောင်၊ လှိုင်မြို့နယ်။ 09964563388</p>
+            </div>
+            <div style="font-size:11px; margin-top:10px; display:flex; justify-content: space-between;">
+                <span id="vn"></span>
+                <span id="vd"></span>
+            </div>
+            <table class="v-table"><tbody id="vt"></tbody></table>
+            <div class="v-summary">
+                <strong style="font-size:15px; color:#FF7F00;">Total: <span id="vg">0</span> KS</strong><br>
+                <span style="font-size:11px;">Pay: <b id="vp"></b></span>
+            </div>
+        </div>
+        <p style="font-size: 10px; color: #888; text-align: center; margin-top: 10px;">PDF အဖြစ် သိမ်းဆည်းပြီးပါပြီ။</p>
+    </div>
+</div>
+
+<div id="shareModal" class="share-modal">
+    <h3>ဘောက်ချာ ပေးပို့မည်လား?</h3>
+    <p style="font-size:12px; color:gray; margin-bottom:20px;">Viber/Telegram သို့ ပို့ရန် နှိပ်ပါ</p>
+    <button onclick="sharePDF()" class="btn-add"><i class="fas fa-share"></i> PDF ပို့မည်</button>
+    <button onclick="location.reload()" style="margin-top:10px; border:none; background:none; color:blue; cursor:pointer;">စာရင်းအသစ်ဖွင့်မည်</button>
+</div>
+
+<script>
+    let cart = [];
+    let currentPDFBlob = null;
+    let currentVoucherNo = "";
+    const { jsPDF } = window.jspdf;
+
+    function addToCart() {
+        const n = document.getElementById('itemName').value;
+        const p = parseInt(document.getElementById('itemPrice').value) || 0;
+        const q = parseInt(document.getElementById('itemQty').value) || 1;
+        if(!n || p <= 0) return;
+        cart.push({ n, p, q, t: p * q });
+        render();
+        document.getElementById('mainBill').style.display = 'block';
+    }
+
+    function render() {
+        const b = document.getElementById('billTable');
+        b.innerHTML = '';
+        let total = 0;
+        cart.forEach(i => {
+            total += i.t;
+            b.innerHTML += `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 0">${i.n} (x${i.q})</td><td align="right">${i.t.toLocaleString()}</td></tr>`;
+        });
+        document.getElementById('gTotal').innerText = total.toLocaleString();
+    }
+
+    async function generateAndAutoSave() {
+        const vNo = Date.now().toString().slice(-5);
+        currentVoucherNo = vNo;
+        document.getElementById('vn').innerText = "#" + vNo;
+        document.getElementById('vd').innerText = new Date().toLocaleDateString();
+        document.getElementById('vg').innerText = document.getElementById('gTotal').innerText;
+        document.getElementById('vp').innerText = document.getElementById('pMethod').value;
+
+        const vt = document.getElementById('vt');
+        vt.innerHTML = '';
+        cart.forEach(i => vt.innerHTML += `<tr><td>${i.n}</td><td align="center">${i.q}</td><td align="right">${i.t.toLocaleString()}</td></tr>`);
+
+        // ဘောက်ချာ အရင်ပြမယ်
+        document.getElementById('vOverlay').style.display = 'flex';
+
+        // နောက်ကွယ်ကနေ PDF Auto Save မယ်
+        setTimeout(async () => {
+            const captureArea = document.getElementById('vCapture');
+            const canvas = await html2canvas(captureArea, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+            
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: [80, 150] });
+            doc.addImage(imgData, 'PNG', 5, 5, 70, 0);
+            
+            // Blob အဖြစ်သိမ်းထားမယ် (Share ဖို့အတွက်)
+            currentPDFBlob = doc.output('blob');
+            
+            // ဖုန်းထဲကို Auto Download ဆွဲမယ်
+            doc.save(`Voucher_${vNo}.pdf`);
+        }, 1000);
+    }
+
+    function showShareDialog() {
+        document.getElementById('vOverlay').style.display = 'none';
+        document.getElementById('shareModal').style.display = 'block';
+    }
+
+    async function sharePDF() {
+        if(!currentPDFBlob) return;
+        const file = new File([currentPDFBlob], `Voucher_${currentVoucherNo}.pdf`, { type: 'application/pdf' });
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Min Copy Voucher',
+                    text: 'Voucher ပေးပို့လိုက်ပါသည်။'
+                });
+            } catch (err) {
+                console.log("Sharing failed");
+            }
+        } else {
+            alert("Share စနစ် အလုပ်မလုပ်ပါ။");
+        }
+        document.getElementById('shareModal').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
